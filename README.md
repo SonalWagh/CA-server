@@ -16,7 +16,7 @@ This project consists of a Certificate Authority (CA) server with a frontend bui
 CA-Server/
 ├── backend/
 │ ├── models/
-│ │ └── CSR.js
+│ │ └── Certificate.js
 │ ├── server.js
 │ ├── package.json
 │ └── uploads/

@@ -1,9 +1,8 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const certificatesRoute = require('./routes/certificates');
-const keysRoute = require('./routes/keyRoute');
+// const certificatesRoute = require('./routes/certificates');
+// const keysRoute = require('./routes/keyRoute');
 const crtRoute = require('./routes/crtRoute');
-const csrRoute = require('./routes/csrRoute');
 const authRoute = require('./routes/auth');
 require('dotenv').config();
 
@@ -23,10 +22,10 @@ mongoose.connect('mongodb://localhost:27017/crud', {
   console.error('Failed to connect to MongoDB', err);
 });
 
-app.use('/certificates', certificatesRoute);
-app.use('/keys', keysRoute);
+// app.use('/certificates', certificatesRoute);
+// app.use('/keys', keysRoute);
 app.use('/crt', crtRoute);
-app.use('/csr', csrRoute);
+// app.use('/csr', csrRoute);
 app.use('/auth',authRoute);
 
 
