@@ -3,7 +3,7 @@ const router = express.Router();
 const path = require('path');
 const { exec } = require('child_process');
 const fs = require('fs');
-const multer=require('multer');
+const multer = require('multer');
 const CRT = require('../models/crtModule');
 const CSR = require('../models/csrModule');
 const Certificate = require('../models/Certificate'); // Adjust the path as needed
@@ -51,13 +51,33 @@ router.post('/generateCertificate', async (req, res) => {
   }
 });
 
-// Route to save the CSR to the database
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, './.received_csr'); // Ensure this directory exists
+  },
+  filename: (req, file, cb) => {
+    cb(null, file.originalname);
+  }
+});
+
+const upload = multer({ storage: storage });
+
+//Route for file upload
+
+router.post('/upload-csr', upload.single('csr'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).send('No file uploaded.');
+  }
+  res.send('File uploaded successfully.');
+  console.log('Received CSR:', req.file.path);
+  // res.json({ message: 'File uploaded successfully.'});
+});
 
 router.post('/save-csr', async (req, res) => {
   try {
-    const csrPath = path.join(__dirname, '..', '.csr', 'client.csr');
+    const csrPath = path.join(__dirname, '..', '.received_csr', 'client.csr');
     const csrContent = fs.readFileSync(csrPath);
-
+    
     const newCSR = new CSR({
       type: 'client',
       content: csrContent,
@@ -71,12 +91,39 @@ router.post('/save-csr', async (req, res) => {
     res.status(500).send('Error saving CSR to database');
   }
 });
-router.get('/list-csrs', async (req, res) => {
+
+
+// router.post('/upload-csr', upload.single('csr'), async (req, res) => {
+//   if (!req.file) {
+//     return res.status(400).send('No file uploaded.');
+//   }
+
+//   try {
+//     const csrPath = path.join(__dirname, '..', '.received_csr', req.file.originalname);
+//     const csrContent = fs.readFileSync(csrPath);
+
+//     const newCSR = new CSR({
+//       type: req.file.originalname,
+//       content: csrContent,
+//     });
+
+//     await newCSR.save();
+
+//     res.status(201).send('File uploaded and CSR saved to database.');
+//     console.log('Received CSR:', csrPath);
+//   } catch (error) {
+//     console.error('Error saving CSR to database:', error);
+//     res.status(500).send('Error saving CSR to database');
+//   }
+// });
+
+
+router.get('/list-csr', async (req, res) => {
   try {
     const csrList = await CSR.find({}, 'type');
-    // const csrList=path.join(__dirname, '..', '.csr', 'client.csr');
+    const csrPath = path.join(__dirname, '..', '.received_csr', 'client.csr');
     if (!fs.existsSync(csrPath)) {
-      console.log("csr not found");
+      console.log("CSR not found");
       return res.status(404).json({ error: 'CSR not found' });
     }
     res.status(200).json(csrList);
@@ -86,53 +133,63 @@ router.get('/list-csrs', async (req, res) => {
     res.status(500).send('Error fetching CSR list');
   }
 });
+
+// Route to generate CRT and save to database
 router.post('/generate-and-save-client-cert', async (req, res) => {
   try {
-    const clientKeyPath = path.join(__dirname, '../.certificates/ca.key');
-    const clientCertPath = path.join(__dirname, '../.certificates/ca.crt');
-    const clientCsrPath = path.join(__dirname, '../.csr/client.csr');
-    const clientCertOutPath = path.join(__dirname, '../.crt/client.crt');
+    const keyPath = path.join(__dirname, '../.certificates/ca.key');
+    const crtPath = path.join(__dirname, '../.certificates/ca.crt');
 
-    if (!fs.existsSync(clientCsrPath)) {
-      console.log("CSR not found");
-      return res.status(404).json({ error: 'CSR not found' });
+    const csrDir = path.join(__dirname, '../.received_csr');
+    const crtDir = path.join(__dirname, '../.crt');
+
+    const csrFiles = fs.readdirSync(csrDir).filter(file => file.endsWith('.csr'));
+
+    if (csrFiles.length === 0) {
+      return res.status(404).json({ error: 'No CSR files found' });
     }
 
-    // OpenSSL command to generate client certificate
-    const opensslCommand = `openssl x509 -req -in ${clientCsrPath} -CA ${clientCertPath} -CAkey ${clientKeyPath} -CAcreateserial -out ${clientCertOutPath} -days 365`;
+    for (const csrFile of csrFiles) {
+      const csrPath = path.join(csrDir, csrFile);
+      const crtFileName = csrFile.replace('.csr', '.crt');
+      const crtOutPath = path.join(crtDir, crtFileName);
 
-    // Execute OpenSSL command
-    exec(opensslCommand, async (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Error generating client certificate: ${stderr}`);
-        return res.status(500).json({ error: 'Failed to generate client certificate' });
-      }
+      const opensslCommand = `openssl x509 -req -in ${csrPath} -CA ${crtPath} -CAkey ${keyPath} -CAcreateserial -out ${crtOutPath} -days 365`;
 
-      console.log('Client certificate generated successfully');
+      // Execute OpenSSL command
+      await new Promise((resolve, reject) => {
+        exec(opensslCommand, async (error, stdout, stderr) => {
+          if (error) {
+            console.error(`Error generating certificate for ${csrFile}: ${stderr}`);
+            reject(`Failed to generate certificate for ${csrFile}`);
+          } else {
+            console.log(`Certificate ${crtFileName} generated successfully`);
 
-      try {
-        const crtContent = fs.readFileSync(clientCertOutPath);
-        const newCSR = new CRT({
-          type: 'client-crt',
-          content: crtContent,
+            try {
+              const crtContent = fs.readFileSync(crtOutPath);
+              const newCRT = new CRT({
+                type: crtFileName,
+                content: crtContent,
+              });
+
+              await newCRT.save();
+              console.log(`Certificate ${crtFileName} saved to database`);
+              resolve();
+            } catch (error) {
+              console.error(`Error saving certificate ${crtFileName} to database:`, error);
+              reject(`Failed to save certificate ${crtFileName} to database`);
+            }
+          }
         });
+      });
+    }
 
-        await newCSR.save();
-
-        console.log('Client certificate saved to database');
-        res.status(201).send('Client certificate generated and saved to database');
-      } catch (error) {
-        console.error('Error saving CRT to database:', error);
-        res.status(500).send('Error saving CRT to database');
-      }
-    });
+    res.status(201).send('All certificates generated and saved to database');
   } catch (error) {
-    console.error('Error in generating client certificate:', error);
-    res.status(500).send('Error in generating client certificate');
+    console.error('Error in generating certificates:', error);
+    res.status(500).send('Error in generating certificates');
   }
 });
-
-module.exports = router;
 
 router.post('/list-crts', async (req, res) => {
   try {
@@ -143,24 +200,14 @@ router.post('/list-crts', async (req, res) => {
     res.status(500).send('Error fetching CRT list');
   }
 });
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, './.received_csr'); // Ensure this directory exists
-  },
-  filename: (req, file, cb) => {
-    cb(null, file.originalname);
-  }
-});
- 
-const upload = multer({ storage: storage });
 
-// Route for file upload
-router.post('/upload-csr', upload.single('csr'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).send('No file uploaded.');
-  }
-  res.send('File uploaded successfully.');
-  console.log('Received CSR:', req.file.path);
+router.post('/get-crt', (req, res) => {
+  const crtFilePath = path.join(__dirname, '../.crt', 'client.crt');
+  res.download(crtFilePath, 'client.crt', (err) => {
+    if (err) {
+      res.status(500).send(err);
+    }
+  });
 });
 
 module.exports = router;

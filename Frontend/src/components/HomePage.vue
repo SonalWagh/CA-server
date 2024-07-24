@@ -56,7 +56,7 @@ export default {
   methods: {
     async fetchCSRList() {
       try {
-        const response = await fetch("http://localhost:3000/csr/list-csrs", {
+        const response = await fetch("http://localhost:3000/crt/list-csr", {
           method: "GET",
         });
         if (!response.ok) {
@@ -75,9 +75,9 @@ export default {
     async signCSR() {
       try {
         const response = await fetch(
-          "http://localhost:3000/crt/generate-client-cert",
+          "http://localhost:3000/crt/generate-and-save-client-cert",
           {
-            method: "GET",
+            method: "POST",
           }
         );
         if (!response.ok) {

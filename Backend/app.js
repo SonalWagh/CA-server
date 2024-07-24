@@ -1,7 +1,5 @@
 const express = require('express');
 const mongoose = require('mongoose');
-// const certificatesRoute = require('./routes/certificates');
-// const keysRoute = require('./routes/keyRoute');
 const crtRoute = require('./routes/crtRoute');
 const authRoute = require('./routes/auth');
 require('dotenv').config();
