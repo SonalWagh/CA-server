@@ -57,15 +57,15 @@ export default {
     async fetchCSRList() {
       try {
         const response = await fetch("http://localhost:3000/crt/list-csr", {
-          method: "GET",
+          method: "POST",
         });
+        this.csrList = await response.json();
         if (!response.ok) {
           if (response.status === 404) {
             throw new Error("CSR not found");
           }
           throw new Error("Failed to fetch CSR list");
         }
-        this.csrList = await response.json();
         Swal.fire("Success", "CSR list fetched successfully", "success");
       } catch (error) {
         console.error("Error fetching CSR list:", error);

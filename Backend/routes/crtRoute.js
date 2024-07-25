@@ -7,6 +7,7 @@ const multer = require('multer');
 const CRT = require('../models/crtModule');
 const CSR = require('../models/csrModule');
 const Certificate = require('../models/Certificate'); // Adjust the path as needed
+const { error } = require('console');
 
 router.post('/generateCertificate', async (req, res) => {
   try {
@@ -61,69 +62,35 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });
-
-//Route for file upload
-
-router.post('/upload-csr', upload.single('csr'), (req, res) => {
+router.post('/upload-csr', upload.single('csr'), async (req, res) => {
   if (!req.file) {
     return res.status(400).send('No file uploaded.');
   }
-  res.send('File uploaded successfully.');
-  console.log('Received CSR:', req.file.path);
-  // res.json({ message: 'File uploaded successfully.'});
-});
-
-router.post('/save-csr', async (req, res) => {
   try {
-    const csrPath = path.join(__dirname, '..', '.received_csr', 'client.csr');
+    const csrPath = path.join(__dirname, '..', '.received_csr', req.file.originalname);
     const csrContent = fs.readFileSync(csrPath);
-    
+
     const newCSR = new CSR({
-      type: 'client',
+      type: req.file.originalname,
       content: csrContent,
     });
 
     await newCSR.save();
 
-    res.status(201).send('CSR saved to database');
+    res.status(201).send('File uploaded and CSR saved to database.');
+    console.log('Received CSR:', csrPath);
   } catch (error) {
     console.error('Error saving CSR to database:', error);
     res.status(500).send('Error saving CSR to database');
   }
 });
 
-
-// router.post('/upload-csr', upload.single('csr'), async (req, res) => {
-//   if (!req.file) {
-//     return res.status(400).send('No file uploaded.');
-//   }
-
-//   try {
-//     const csrPath = path.join(__dirname, '..', '.received_csr', req.file.originalname);
-//     const csrContent = fs.readFileSync(csrPath);
-
-//     const newCSR = new CSR({
-//       type: req.file.originalname,
-//       content: csrContent,
-//     });
-
-//     await newCSR.save();
-
-//     res.status(201).send('File uploaded and CSR saved to database.');
-//     console.log('Received CSR:', csrPath);
-//   } catch (error) {
-//     console.error('Error saving CSR to database:', error);
-//     res.status(500).send('Error saving CSR to database');
-//   }
-// });
-
-
-router.get('/list-csr', async (req, res) => {
+router.post('/list-csr', async (req, res) => {
   try {
     const csrList = await CSR.find({}, 'type');
-    const csrPath = path.join(__dirname, '..', '.received_csr', 'client.csr');
+    const csrPath=path.join(__dirname, '..', '.received_csr');
     if (!fs.existsSync(csrPath)) {
-      console.log("CSR not found");
+      console.log("csr not found");
       return res.status(404).json({ error: 'CSR not found' });
     }
     res.status(200).json(csrList);
@@ -134,7 +101,9 @@ router.get('/list-csr', async (req, res) => {
   }
 });
 
-// Route to generate CRT and save to database
+
+
+//Route to generate CRT and save to database
 router.post('/generate-and-save-client-cert', async (req, res) => {
   try {
     const keyPath = path.join(__dirname, '../.certificates/ca.key');
@@ -184,7 +153,7 @@ router.post('/generate-and-save-client-cert', async (req, res) => {
       });
     }
 
-    res.status(201).send('All certificates generated and saved to database');
+    // res.status(201).send('All certificates generated and saved to database');
   } catch (error) {
     console.error('Error in generating certificates:', error);
     res.status(500).send('Error in generating certificates');
@@ -193,7 +162,7 @@ router.post('/generate-and-save-client-cert', async (req, res) => {
 
 router.post('/list-crts', async (req, res) => {
   try {
-    const crtList = await CRT.find({}, 'type content');
+    const crtList = await CRT.find({}, 'type');
     res.status(200).json(crtList);
   } catch (error) {
     console.error('Error fetching CRT list:', error);
@@ -202,12 +171,22 @@ router.post('/list-crts', async (req, res) => {
 });
 
 router.post('/get-crt', (req, res) => {
-  const crtFilePath = path.join(__dirname, '../.crt', 'client.crt');
-  res.download(crtFilePath, 'client.crt', (err) => {
+  const crtFilePath = path.join(__dirname, '../.crt', 'pratik.crt');
+  res.download(crtFilePath, 'client1.crt', (err) => {
     if (err) {
       res.status(500).send(err);
     }
   });
 });
+
+router.post('/get-cacrt', (req, res) => {
+  const cacrtFilePath = path.join(__dirname, '../.certificates', 'ca.crt');
+  res.download(cacrtFilePath, 'ca.crt', (err) => {
+    if (err) {
+      res.status(500).send(err);
+    }
+  });
+});
+
 
 module.exports = router;
