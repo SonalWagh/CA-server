@@ -75,7 +75,7 @@ export default {
     async signCSR() {
       try {
         const response = await fetch(
-          "http://localhost:3000/crt/generate-and-save-client-cert",
+          "http://localhost:3000/crt/generateAndSaveClientCertificate",
           {
             method: "POST",
           }
@@ -150,7 +150,7 @@ export default {
 
 button {
   font-weight: bold;
-  background-color: rgb(174, 212, 157);
+  background-color: rgb(193, 242, 155);
   font-size: 20px; /* Increase button font size */
   padding: 20px 30px; /* Adjust padding for button size */
   border-radius: 10px;
