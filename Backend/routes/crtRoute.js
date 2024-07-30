@@ -9,7 +9,7 @@ const CRT = require('../models/crtModule');
 const CSR = require('../models/csrModule');
 const Certificate = require('../models/Certificate'); // Adjust the path as needed
 
-//Function to generate CA.key and CA.crt
+//1.Function to generate CA.key and CA.crt
 router.post('/generateCertificate', async (req, res) => {
   try {
     const keyPath = path.join(__dirname, '..', '.certificates', 'ca.key');
@@ -53,14 +53,14 @@ router.post('/generateCertificate', async (req, res) => {
   }
 });
 
-// Function to generate and save certificates
+// 2.Function to generate crt file and save certificates
 async function generateAndSaveClientCertificate(csrFile) {
   try {
     const keyPath = path.join(__dirname, '../.certificates/ca.key');
     const crtPath = path.join(__dirname, '../.certificates/ca.crt');
 
     const csrDir = path.join(__dirname, '../.received_csr');
-    const crtDir = path.join(__dirname, '../.crt');
+    const crtDir = path.join(__dirname, '../.generated_crt');
 
     const csrPath = path.join(csrDir, csrFile);
     const crtFileName = csrFile.replace('.csr', '.crt');
@@ -99,7 +99,7 @@ async function generateAndSaveClientCertificate(csrFile) {
   }
 }
 
-// Watcher setup to monitor the .received_csr directory for new files
+//3. Watcher setup to monitor the .received_csr directory for new files
 const csrDir = path.join(__dirname, '../.received_csr');
 const watcher = chokidar.watch(csrDir, {
   persistent: true,
@@ -112,7 +112,7 @@ watcher.on('add', (filePath) => {
   generateAndSaveClientCertificate(csrFile);
 });
 
-// Multer setup for file uploads
+// 4.Multer setup for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, './.received_csr'); // Ensure this directory exists
@@ -121,8 +121,8 @@ const storage = multer.diskStorage({
     cb(null, file.originalname);
   }
 });
-
 const upload = multer({ storage: storage });
+//Route to receive and store csr file
 router.post('/upload-csr', upload.single('csr'), async (req, res) => {
   if (!req.file) {
     return res.status(400).send('No file uploaded.');
@@ -145,6 +145,7 @@ router.post('/upload-csr', upload.single('csr'), async (req, res) => {
     res.status(500).send('Error saving CSR to database');
   }
 });
+//5.list all csr file
 
 router.post('/list-csr', async (req, res) => {
   try {
@@ -156,6 +157,7 @@ router.post('/list-csr', async (req, res) => {
   }
 });
 
+//6.list all crts files
 router.post('/list-crts', async (req, res) => {
   try {
     const crtList = await CRT.find({}, 'type');
@@ -166,16 +168,7 @@ router.post('/list-crts', async (req, res) => {
   }
 });
 
-// router.post('/get-crt', (req, res) => {
-//   const crtFilePath = path.join(__dirname, '../.crt');
-//   res.download(crtFilePath, 'sonal.crt', (err) => {
-//     if (err) {
-//       res.status(500).send(err);
-//     }
-//   });
-// });
-
-// Route to download any .crt file
+//7.Route to download any .crt file
 router.post('/get-crt', (req, res) => {
   const { filename } = req.body;
 
@@ -183,7 +176,7 @@ router.post('/get-crt', (req, res) => {
     return res.status(400).send('Filename not provided');
   }
 
-  const crtFilePath = path.join(__dirname, '../.crt', filename);
+  const crtFilePath = path.join(__dirname, '../.generated_crt', filename);
 
   if (!fs.existsSync(crtFilePath)) {
     return res.status(404).send('File not found');
@@ -196,6 +189,8 @@ router.post('/get-crt', (req, res) => {
   });
 });
 
+//8.Route to download ca.crt file
+
 router.post('/get-cacrt', (req, res) => {
   const cacrtFilePath = path.join(__dirname, '../.certificates', 'ca.crt');
   res.download(cacrtFilePath, 'ca.crt', (err) => {
@@ -205,4 +200,71 @@ router.post('/get-cacrt', (req, res) => {
   });
 });
 
+//9. Set up multer for file or image file upload with original filename
+const storage_image = multer.diskStorage({
+  destination: (req, file, cb) => {
+      cb(null, '.received_image/');
+  },
+  filename: (req, file, cb) => {
+      cb(null, file.originalname);
+  }
+});
+const upload_image = multer({ storage: storage_image });
+
+//10.POST API to receive and sign the image
+router.post('/upload-image', upload_image.single('image'), (req, res) => {
+  if (!req.file) {
+      return res.status(400).send('No file uploaded.');
+  }
+
+  const imagePath = req.file.path;
+  const hashPath = `${imagePath}.hash`;
+  const signedImagePath = path.join('.signed_image', path.basename(imagePath) + '.sig');
+  const privateKeyPath =path.join(__dirname, '..', '.certificates', 'ca.key');
+
+  // Ensure the output directories exist
+  if (!fs.existsSync('.signed_image')) {
+      fs.mkdirSync('.signed_image');
+  }
+
+  // Generate the hash of the image
+  exec(`openssl dgst -sha256 -binary ${imagePath} > ${hashPath}`, (err) => {
+      if (err) {
+          return res.status(500).send('Error generating hash: ' + err.message);
+      }
+
+      // Sign the hash
+      exec(`openssl rsautl -sign -inkey ${privateKeyPath} -in ${hashPath} -out ${signedImagePath}`, (err) => {
+          if (err) {
+              return res.status(500).send('Error signing image: ' + err.message);
+          }
+
+          res.send(`Image signed successfully. Signed file: ${signedImagePath}`);
+      });
+  });
+});
+
+// 11.Route to download any .sig file
+router.post('/get-sigimg', (req, res) => {
+  const { filename } = req.body;
+
+  if (!filename) {
+    return res.status(400).send('Filename not provided');
+  }
+
+  const crtFilePath = path.join(__dirname, '../.signed_image', filename);
+
+  if (!fs.existsSync(crtFilePath)) {
+    return res.status(404).send('File not found');
+  }
+
+  res.download(crtFilePath, filename, (err) => {
+    if (err) {
+      res.status(500).send(err);
+    }
+  });
+});
+
 module.exports = router;
+
+
